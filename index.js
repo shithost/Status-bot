@@ -36,9 +36,9 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'setup') {
-        await interaction.reply({ content: 'Fetching nodes and servers...', ephemeral: true });
+        await interaction.reply({ content: 'Fetching nodes, servers, and user data...', ephemeral: true });
 
-        let message = await interaction.channel.send({ content: 'Fetching nodes and servers...' });
+        let message = await interaction.channel.send({ content: 'Fetching nodes, servers, and user data...' });
 
         const updateNodesAndServers = async () => {
             try {
@@ -58,8 +58,17 @@ client.on('interactionCreate', async interaction => {
                     },
                 });
 
+                const usersResponse = await axios.get(`${panelUrl}/api/application/users`, {
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'Application/vnd.pterodactyl.v1+json',
+                    },
+                });
+
                 const nodes = nodesResponse.data.data;
                 const servers = serversResponse.data.data;
+                const users = usersResponse.data.data;
 
                 const serverDetails = await Promise.all(servers.map(async server => {
                     const serverDetailsResponse = await axios.get(`${panelUrl}/api/application/servers/${server.attributes.id}`, {
@@ -82,6 +91,9 @@ client.on('interactionCreate', async interaction => {
                 const mostDiskServer = serverDetails.reduce((prev, current) => (prev.disk > current.disk ? prev : current), serverDetails[0]);
                 const mostRamServer = serverDetails.reduce((prev, current) => (prev.memory > current.memory ? prev : current), serverDetails[0]);
 
+                const totalUsers = users.length;
+                const adminUsers = users.filter(user => user.attributes.root_admin === true).length;
+
                 const embed = new EmbedBuilder()
                     .setTitle('Status')
                     .setColor(0x0099ff)
@@ -101,8 +113,8 @@ client.on('interactionCreate', async interaction => {
                         inline: false
                     },
                     {
-                        name: 'Server Owners',
-                        value: `CPU: ${mostCpuServer.owner}\nDisk: ${mostDiskServer.owner}\nRAM: ${mostRamServer.owner}`,
+                        name: 'User Statistics',
+                        value: `Total Users: ${totalUsers}\nAdmin Users: ${adminUsers}`,
                         inline: false
                     }
                 );
@@ -113,16 +125,16 @@ client.on('interactionCreate', async interaction => {
                     message = await interaction.channel.send({ embeds: [embed] });
                 }
             } catch (error) {
-                console.error('Error fetching nodes or servers:', error.response ? error.response.data : error.message);
+                console.error('Error fetching nodes, servers, or users:', error.response ? error.response.data : error.message);
                 if (message.editable) {
-                    await message.edit({ content: 'Error fetching nodes or servers. Please try again later.' });
+                    await message.edit({ content: 'Error fetching nodes, servers, or users. Please try again later.' });
                 }
             }
         };
 
         await updateNodesAndServers();
 
-        const intervalId = setInterval(updateNodesAndServers, 5000);
+        const intervalId = setInterval(updateNodesAndServers, 10000);
 
         interaction.channel.createMessageCollector({ time: 300000 }).on('end', () => {
             clearInterval(intervalId);
